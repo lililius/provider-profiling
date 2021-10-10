@@ -125,8 +125,6 @@ SERmse_fix=rep(0,nrep)
 SERmse_ran=rep(0,nrep)
 SERmse=rep(0,nrep)
 SERmse_or=rep(0,nrep)
-agrid=NULL
-betagrid=NULL
 Im=diag(m)
 Delta=NULL
 for(i in 1:(m-1)){
