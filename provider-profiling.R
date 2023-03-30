@@ -1,4 +1,3 @@
-rm(list=ls())
 library(MASS)
 library(coxme)
 library(survival)
@@ -82,12 +81,11 @@ Fn_SCAD=function(lambda){
   list(ahat=ahat,betahat=betahat)
 }
 
-T=1
 nrep=100
 m=50
 p=2
-c1=m*0.18
-c2=m*0.18
+c1=m*0.1
+c2=m*0.1
 a1=-1
 a2=1
 eta=1
@@ -121,42 +119,37 @@ aMSE_or=rep(0,nrep)
 Aor=matrix(0,nrep,2)
 se.a_or=matrix(0,nrep,2)
 cp.a_or=matrix(0,nrep,2)
-SERmse_fix=rep(0,nrep)
-SERmse_ran=rep(0,nrep)
-SERmse=rep(0,nrep)
-SERmse_or=rep(0,nrep)
 Im=diag(m)
 Delta=NULL
 for(i in 1:(m-1)){
   Delta=cbind(Delta,(Im[,i]-Im[,(1:m)>i]))
 }
 Delta=t(Delta)
-xi=seq(0.2,0.3,by=0.03)
+xi=seq(0.11,0.2,by=0.03)
 nxi=length(xi)
 for(irep in 1:nrep){
-  set.seed((T-1)*nrep+irep)
-  ni=round(runif(m,10,100))
+  set.seed(irep)
+  ni=round(runif(m,50,100))
   N=sum(ni)
-  atrue=c(rnorm(c1,-1,0.1),rnorm(m-c1-c2,0,0.1),rnorm(c2,1,0.1))
+  atrue=c(rep(a1,c1),rep(0,m-c1-c2),rep(a2,c2))
   J1=matrix(rep(1:p,times=p),byrow=FALSE, nrow=p)
   K1=matrix(rep(1:p,times=p),byrow=TRUE, nrow=p)
   sigma=0.2^abs(J1-K1)
   X=mvrnorm(N,rep(0,p),sigma)
-  beta=c(0.2,-0.2)
+  beta=c(2,2)
   Z=matrix(0,N,m)
   id=NULL
   a=NULL
-  SERtrue=rep(0,m)
   for(k in 1:m){
     Z[(sum(ni[(1:m)<k])+1):(sum(ni[(1:m)<k])+ni[k]),k]=rep(1,ni[k])
     id=c(id,rep(k,ni[k]))
     a=c(a,rep(atrue[k],ni[k]))
-    SERtrue[k]=sum(exp(atrue[k]+X[(sum(ni[(1:m)<k])+1):(sum(ni[(1:m)<k])+ni[k]),]%*%beta))/sum(exp(median(atrue)+X[(sum(ni[(1:m)<k])+1):(sum(ni[(1:m)<k])+ni[k]),]%*%beta))
   }
   u=runif(N,0,1)
-  scale=0.05
-  survtime=as.vector(-log(u)/(scale*exp(Z%*%atrue+X%*%beta)))
-  censor=runif(N,0,50)
+  scale=2
+  shape=3
+  survtime=as.vector((-log(u)/(scale*exp(Z%*%atrue+X%*%beta)))^(1/shape))
+  censor=runif(N,0,1)
   time=pmin(survtime,censor)
   status=ifelse(time<censor,1,0)
   rate=1-sum(status)/length(status)
@@ -167,9 +160,6 @@ for(irep in 1:nrep){
     Risk[[i]]=which(time>=time[i])
     Cset[[i]]=which(time<=time[i])
   }
-  SER=function(x,ahat,betahat){
-    SER=sum(exp(ahat[x]+X[(sum(ni[(1:m)<x])+1):(sum(ni[(1:m)<x])+ni[x]),]%*%betahat))/sum(exp(median(ahat)+X[(sum(ni[(1:m)<x])+1):(sum(ni[(1:m)<x])+ni[x]),]%*%betahat))
-  }
   #random-effect model
   model=coxme(Surv(time,status)~X+(1|id),data=Data)
   betaran[irep,]=fixef(model)
@@ -177,8 +167,6 @@ for(irep in 1:nrep){
   aMSE_ran[irep]=sum((atrue-aran[irep,])^2)/m
   se.beta_ran[irep,]=sqrt(diag(vcov(model)))
   cp.beta_ran[irep,]=ifelse(abs(betaran[irep,]-beta)<1.96*se.beta_ran[irep,],1,0)
-  SERran=sapply(1:m,SER,ahat=aran[irep,],betahat=betaran[irep,])
-  SERmse_ran[irep]=sum((SERtrue-SERran)^2)/m
   
   #fixed-effect model
   r1=m/2
@@ -188,8 +176,6 @@ for(irep in 1:nrep){
   cp.beta_fix[irep,]=ifelse(abs(betafix[irep,]-beta)<1.96*se.beta_fix[irep,],1,0)
   afix[irep,]=as.vector(c(coef(fix)[-(1:p)][1:(r1-1)],0,coef(fix)[-(1:p)][r1:(m-1)]))
   aMSE_fix[irep]=sum((atrue-afix[irep,])^2)/m
-  SERfix=sapply(1:m,SER,ahat=afix[irep,],betahat=betafix[irep,])
-  SERmse_fix[irep]=sum((SERtrue-SERfix)^2)/m
   
   #Oracle
   gk=list()
@@ -213,9 +199,7 @@ for(irep in 1:nrep){
   Aor[irep,]=para_or[-(1:p)]
   se.a_or[irep,]=se_or[-(1:p)]
   cp.a_or[irep,]=ifelse(abs(para_or[-(1:p)]-c(a1,a2))<1.96*se_or[-(1:p)],1,0)
-  SERor=sapply(1:m,SER,ahat=aor[irep,],betahat=betaor[irep,])
-  SERmse_or[irep]=sum((SERtrue-SERor)^2)/m
-  
+ 
   #fused-effects model
   a0=as.vector(coef(fix)[-(1:p)])
   a0=c(a0[1:(r1-1)],0,a0[r1:(m-1)])
@@ -296,8 +280,6 @@ for(irep in 1:nrep){
   cp.beta[irep,]=ifelse(abs(betaest[irep,]-beta)<1.96*se.beta[irep,],1,0)
   aMSE[irep]=sum((atrue-aest[irep,])^2)/m
   RI[irep,]=comPart(round(aest[irep,]),round(atrue))
-  SERest=sapply(1:m,SER,ahat=aest[irep,],betahat=betaest[irep,])
-  SERmse[irep]=sum((SERtrue-SERest)^2)/m
   if(ngroup[irep]==3){
     Aest=rbind(Aest,para[-(1:p)])
     se.a=rbind(se.a,se[-(1:p)])
